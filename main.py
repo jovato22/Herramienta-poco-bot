@@ -1,96 +1,92 @@
 import requests
-from telegram.ext import Updater, CommandHandler
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 
+# --- CONFIGURACIÓN ---
+TOKEN = "8725996090:AAF44XD_l4TpymdFrEareVG-RpYH_OM8kzg"
 API_PRICE = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
+MEMPOOL_API = "https://mempool.space/api"
 
-def start(update, context):
-    update.message.reply_text("Bot operativo. Usa /bloque <numero>")
+# Variable global para simular el precio del bloque anterior en la prueba
+ultimo_precio_registrado = 64000.0 
 
-# Obtener hash del bloque desde la altura
-def get_block_hash(height):
-    try:
-        return requests.get(f"https://mempool.space/api/block-height/{height}").text
-    except:
-        return None
-
-# Obtener timestamp del bloque usando el hash
-def get_block_time(height):
-    block_hash = get_block_hash(height)
-    if not block_hash:
-        return None
-    try:
-        data = requests.get(f"https://mempool.space/api/block/{block_hash}").json()
-        return data["timestamp"]
-    except:
-        return None
-
-# Precio BTC
 def get_price():
     try:
         r = requests.get(API_PRICE).json()
-        return r["bitcoin"]["usd"]
+        return float(r["bitcoin"]["usd"])
     except:
         return None
 
-# Múltiplos
+def check_block(height):
+    try:
+        r = requests.get(f"{MEMPOOL_API}/block-height/{height}")
+        return r.text if r.status_code == 200 else None
+    except:
+        return None
+
 def is_multiple(n, base):
     return n % base == 0
 
-def bloque(update, context):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🚀 Bot de prueba Bitcoin activo.\nUsa /bloque <numero>")
+
+async def bloque(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global ultimo_precio_registrado
+    
+    if not context.args:
+        await update.message.reply_text("❌ Indica el número de bloque: /bloque 840000")
+        return
+
     try:
         n = int(context.args[0])
     except:
-        update.message.reply_text("Uso: /bloque <numero>")
+        await update.message.reply_text("❌ Número no válido.")
         return
 
-    block_time = get_block_time(n)
-    if block_time is None:
-        update.message.reply_text(f"Bloque {n} aún no está minado.")
+    # Verificar si el bloque existe
+    block_hash = check_block(n)
+    if not block_hash:
+        await update.message.reply_text(f"⏳ El bloque {n} aún no ha sido minado.")
         return
 
+    # Obtener precio actual y comparar
     price_now = get_price()
-    price_prev = get_price()
+    if price_now is None:
+        await update.message.reply_text("⚠️ Error al obtener el precio.")
+        return
 
-    symbol = "➖"
-    if price_now > price_prev:
-        symbol = "✔️"
-    elif price_now < price_prev:
-        symbol = "❌"
+    # Lógica del símbolo (Compara precio actual vs el último que guardó el bot)
+    symbol = "✔️" if price_now >= ultimo_precio_registrado else "❌"
+    
+    msg = f"🟦 **BLOQUE {n}**\n"
+    msg += f"💰 Precio BTC: `${price_now:,.2f} USD` {symbol}\n"
+    msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n, 144) else '❌'}\n"
+    msg += f"⚙️ Múltiplo 2016: {'✔️' if is_multiple(n, 2016) else '❌'}\n\n"
 
-    msg = f"🟦 Bloque {n}\n"
-    msg += f"Precio BTC: {price_now} USD {symbol}\n"
-    msg += f"Múltiplo de 144: {'✔️' if is_multiple(n,144) else '❌'}\n"
-    msg += f"Múltiplo de 2016: {'✔️' if is_multiple(n,2016) else '❌'}\n\n"
-
+    # Bloque N+6
     n6 = n + 6
-    block_time6 = get_block_time(n6)
+    if check_block(n6):
+        msg += f"🟩 **BLOQUE {n6} (N+6)**\n"
+        msg += f"✅ Confirmado\n"
+        msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n6, 144) else '❌'}\n"
+    else:
+        msg += f"🟩 **BLOQUE {n6} (N+6)**\n"
+        msg += f"⏳ Esperando minado..."
 
-    if block_time6:
-        price6 = get_price()
-        price5 = get_price()
+    # Actualizamos el "precio anterior" para la siguiente consulta de prueba
+    ultimo_precio_registrado = price_now
 
-        symbol6 = "➖"
-        if price6 > price5:
-            symbol6 = "✔️"
-        elif price6 < price5:
-            symbol6 = "❌"
-
-        msg += f"🟩 Bloque {n6} (bloque + 6)\n"
-        msg += f"Precio BTC: {price6} USD {symbol6}\n"
-        msg += f"Múltiplo de 144: {'✔️' if is_multiple(n6,144) else '❌'}\n"
-        msg += f"Múltiplo de 2016: {'✔️' if is_multiple(n6,2016) else '❌'}\n"
-
-    update.message.reply_text(msg)
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 def main():
-    updater = Updater("8725996090:AAF44XD_l4TpymdFrEareVG-RpYH_OM8kzg", use_context=True)
-    dp = updater.dispatcher
+    # Usando la versión asíncrona de la librería (v20+)
+    app = Application.builder().token(TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("bloque", bloque))
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("bloque", bloque))
-
-    updater.start_polling()
-    updater.idle()
+    print("🤖 Bot iniciado con el token proporcionado...")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
