@@ -3,6 +3,9 @@ from telegram.ext import Updater, CommandHandler
 
 API_PRICE = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
 
+def start(update, context):
+    update.message.reply_text("Bot operativo. Usa /bloque <numero>")
+
 # Obtener hash del bloque desde la altura
 def get_block_hash(height):
     try:
@@ -40,7 +43,6 @@ def bloque(update, context):
         update.message.reply_text("Uso: /bloque <numero>")
         return
 
-    # Bloque principal
     block_time = get_block_time(n)
     if block_time is None:
         update.message.reply_text(f"Bloque {n} aún no está minado.")
@@ -60,7 +62,6 @@ def bloque(update, context):
     msg += f"Múltiplo de 144: {'✔️' if is_multiple(n,144) else '❌'}\n"
     msg += f"Múltiplo de 2016: {'✔️' if is_multiple(n,2016) else '❌'}\n\n"
 
-    # Bloque + 6
     n6 = n + 6
     block_time6 = get_block_time(n6)
 
@@ -85,6 +86,7 @@ def main():
     updater = Updater("8725996090:AAF44XD_l4TpymdFrEareVG-RpYH_OM8kzg", use_context=True)
     dp = updater.dispatcher
 
+    dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("bloque", bloque))
 
     updater.start_polling()
