@@ -32,18 +32,15 @@ def is_multiple(n, base):
     return n % base == 0
 
 def get_144_stats(current_n):
-    """Calcula el múltiplo anterior y el siguiente de 144."""
     prev_m = (current_n // 144) * 144
-    # Si el número actual ya es múltiplo, el anterior real sería -144
     if prev_m == current_n:
         prev_m = current_n - 144
-        
     next_m = ((current_n // 144) + 1) * 144
     return prev_m, next_m
 
 async def bloque(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("❌ Uso: `/bloque <numero>`", parse_mode="Markdown")
+        await update.message.reply_text("❌ Uso: `/bloque <numero>`")
         return
 
     try:
@@ -54,54 +51,61 @@ async def bloque(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_chat_action("typing")
 
-    # 1. Obtener datos Bloque solicitado (N)
+    # DATOS: Bloque Solicitado (N), su anterior 144 y su N+6
     data_n = get_block_data(n)
     if not data_n:
         await update.message.reply_text(f"⏳ El bloque {n} no existe o no hay datos.")
         return
 
-    # 2. Obtener datos Múltiplo 144 Anterior (Automático)
-    prev_144_height, next_144_height = get_144_stats(n)
-    data_prev = get_block_data(prev_144_height)
+    prev_144_h, next_144_h = get_144_stats(n)
+    data_prev = get_block_data(prev_144_h)
+    
+    n6 = n + 6
+    data_n6 = get_block_data(n6)
 
-    # 3. Obtener datos Bloque N+6
-    data_n6 = get_block_data(n + 6)
-
-    # --- CONSTRUCCIÓN DEL MENSAJE ---
+    # --- CONSTRUCCIÓN DEL MENSAJE (SIGUIENDO TU FOTO) ---
     msg = f"🔍 **ANÁLISIS DE RED (Bloque {n})**\n\n"
 
-    # Sección Múltiplo Anterior
+    # 1. MÚLTIPLO 144 ANTERIOR (Contexto)
     if data_prev and data_n['price']:
-        sym_prev = "🔼" if data_n['price'] > data_prev['price'] else "🔽"
         diff_prev = data_n['price'] - data_prev['price']
-        msg += f"⏪ **Último Múltiplo 144 ({prev_144_height})**\n"
-        msg += f"💰 Precio entonces: `${data_prev['price']:,.2f}`\n"
+        sym_prev = "🔼" if diff_prev > 0 else "🔽"
+        msg += f"⏪ **Último Múltiplo 144 ({prev_144_h})**\n"
+        msg += f"💰 Precio: `${data_prev['price']:,.2f}`\n"
         msg += f"📊 Variación hasta N: `{'+' if diff_prev > 0 else ''}{diff_prev:,.2f} USD` {sym_prev}\n\n"
 
-    # Sección Bloque Solicitado
-    msg += f"🟦 **BLOQUE {n} (Tu consulta)**\n"
+    # 2. BLOQUE AZUL (N)
+    msg += f"🟦 **BLOQUE {n}**\n"
     msg += f"💰 Precio: `${data_n['price']:,.2f} USD`\n"
     msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n, 144) else '❌'}\n\n"
 
-    # Sección N+6
+    # 3. BLOQUE VERDE (N+6) - COMPARACIÓN AUTOMÁTICA
+    msg += f"🟩 **BLOQUE {n6} (N+6)**\n"
     if data_n6:
-        sym6 = "✔️" if data_n6['price'] > data_n['price'] else "❌"
+        # Aquí se hace la comparación de precios entre N y N+6
         diff6 = data_n6['price'] - data_n['price']
-        msg += f"🟩 **BLOQUE {n+6} (Confirmación)**\n"
+        sym6 = "✔️" if data_n6['price'] > data_n['price'] else "❌"
+        
         msg += f"💰 Precio: `${data_n6['price']:,.2f} USD` {sym6}\n"
+        msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n6, 144) else '❌'}\n"
         msg += f"📈 Variación: `{'+' if diff6 > 0 else ''}{diff6:,.2f} USD` \n\n"
+    else:
+        # Si el bloque N+6 ya existe en la red pero aún no tenemos el precio
+        msg += f"✅ Confirmado\n"
+        msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n6, 144) else '❌'}\n"
+        msg += f"⏳ Esperando datos de precio para comparar...\n\n"
 
-    # Sección Próximo Objetivo
-    faltan = next_144_height - n
+    # 4. PRÓXIMO OBJETIVO
+    faltan = next_144_h - n
     msg += f"🎯 **Próximo Múltiplo 144:**\n"
-    msg += f"➡️ Bloque: `{next_144_height}` (Faltan: `{faltan}`)"
+    msg += f"➡️ Bloque: `{next_144_h}` (Faltan: `{faltan}`)"
 
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 def main():
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("bloque", bloque))
-    application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Bot Listo.")))
+    application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Bot Bitcoin Activo.")))
     application.run_polling()
 
 if __name__ == "__main__":
