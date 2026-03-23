@@ -51,7 +51,7 @@ async def bloque(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_chat_action("typing")
 
-    # DATOS: Bloque Solicitado (N), su anterior 144 y su N+6
+    # Obtener datos
     data_n = get_block_data(n)
     if not data_n:
         await update.message.reply_text(f"⏳ El bloque {n} no existe o no hay datos.")
@@ -63,10 +63,10 @@ async def bloque(update: Update, context: ContextTypes.DEFAULT_TYPE):
     n6 = n + 6
     data_n6 = get_block_data(n6)
 
-    # --- CONSTRUCCIÓN DEL MENSAJE (SIGUIENDO TU FOTO) ---
+    # --- CONSTRUCCIÓN DEL MENSAJE ---
     msg = f"🔍 **ANÁLISIS DE RED (Bloque {n})**\n\n"
 
-    # 1. MÚLTIPLO 144 ANTERIOR (Contexto)
+    # 1. Múltiplo Anterior
     if data_prev and data_n['price']:
         diff_prev = data_n['price'] - data_prev['price']
         sym_prev = "🔼" if diff_prev > 0 else "🔽"
@@ -74,38 +74,37 @@ async def bloque(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"💰 Precio: `${data_prev['price']:,.2f}`\n"
         msg += f"📊 Variación hasta N: `{'+' if diff_prev > 0 else ''}{diff_prev:,.2f} USD` {sym_prev}\n\n"
 
-    # 2. BLOQUE AZUL (N)
+    # 2. Bloque Solicitado
     msg += f"🟦 **BLOQUE {n}**\n"
     msg += f"💰 Precio: `${data_n['price']:,.2f} USD`\n"
     msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n, 144) else '❌'}\n\n"
 
-    # 3. BLOQUE VERDE (N+6) - COMPARACIÓN AUTOMÁTICA
+    # 3. Bloque N+6
     msg += f"🟩 **BLOQUE {n6} (N+6)**\n"
     if data_n6:
-        # Aquí se hace la comparación de precios entre N y N+6
         diff6 = data_n6['price'] - data_n['price']
         sym6 = "✔️" if data_n6['price'] > data_n['price'] else "❌"
-        
         msg += f"💰 Precio: `${data_n6['price']:,.2f} USD` {sym6}\n"
         msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n6, 144) else '❌'}\n"
         msg += f"📈 Variación: `{'+' if diff6 > 0 else ''}{diff6:,.2f} USD` \n\n"
     else:
-        # Si el bloque N+6 ya existe en la red pero aún no tenemos el precio
         msg += f"✅ Confirmado\n"
         msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n6, 144) else '❌'}\n"
-        msg += f"⏳ Esperando datos de precio para comparar...\n\n"
+        msg += f"⏳ Esperando datos de precio...\n\n"
 
-    # 4. PRÓXIMO OBJETIVO
+    # 4. Próximo Objetivo (CON HORAS)
     faltan = next_144_h - n
+    horas_aprox = (faltan * 10) / 60
     msg += f"🎯 **Próximo Múltiplo 144:**\n"
-    msg += f"➡️ Bloque: `{next_144_h}` (Faltan: `{faltan}`)"
+    msg += f"➡️ Bloque: `{next_144_h}`\n"
+    msg += f"⌛ Faltan: `{faltan}` bloques (aprox. {horas_aprox:.1f} horas)"
 
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 def main():
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("bloque", bloque))
-    application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Bot Bitcoin Activo.")))
+    application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Bot Activo.")))
     application.run_polling()
 
 if __name__ == "__main__":
