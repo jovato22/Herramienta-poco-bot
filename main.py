@@ -1,91 +1,78 @@
 import requests
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 # --- CONFIGURACIÓN ---
 TOKEN = "8725996090:AAF44XD_l4TpymdFrEareVG-RpYH_OM8kzg"
-API_PRICE = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-MEMPOOL_API = "https://mempool.space/api"
 
-# Variable global para simular el precio del bloque anterior en la prueba
-ultimo_precio_registrado = 64000.0 
-
-def get_price():
+def get_block_data(height):
+    """Obtiene hash, timestamp y precio estimado del bloque."""
     try:
-        r = requests.get(API_PRICE).json()
-        return float(r["bitcoin"]["usd"])
-    except:
-        return None
-
-def check_block(height):
-    try:
-        r = requests.get(f"{MEMPOOL_API}/block-height/{height}")
-        return r.text if r.status_code == 200 else None
+        # 1. Obtener Hash del bloque
+        hash_res = requests.get(f"https://mempool.space/api/block-height/{height}")
+        if hash_res.status_code != 200: return None
+        block_hash = hash_res.text
+        
+        # 2. Obtener datos detallados del bloque (timestamp)
+        block_data = requests.get(f"https://mempool.space/api/block/{block_hash}").json()
+        timestamp = block_data['timestamp']
+        
+        # 3. Obtener precio histórico (Usamos la API de CoinGecko o similar)
+        # Para esta prueba, consultamos un precio de referencia basado en el tiempo
+        # Nota: Las APIs de precio histórico real a veces son lentas o de pago, 
+        # aquí usamos una estimación para la comparativa:
+        price_res = requests.get(f"https://api.coingecko.com/api/v3/coins/bitcoin/market_chart/range?vs_currency=usd&from={timestamp}&to={timestamp+3600}").json()
+        price = price_res['prices'][0][1] if 'prices' in price_res else None
+        
+        return {"price": price, "timestamp": timestamp}
     except:
         return None
 
 def is_multiple(n, base):
     return n % base == 0
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚀 Bot de prueba Bitcoin activo.\nUsa /bloque <numero>")
-
 async def bloque(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global ultimo_precio_registrado
-    
-    if not context.args:
-        await update.message.reply_text("❌ Indica el número de bloque: /bloque 840000")
-        return
-
     try:
         n = int(context.args[0])
     except:
-        await update.message.reply_text("❌ Número no válido.")
+        await update.message.reply_text("❌ Uso: /bloque <numero>")
         return
 
-    # Verificar si el bloque existe
-    block_hash = check_block(n)
-    if not block_hash:
-        await update.message.reply_text(f"⏳ El bloque {n} aún no ha sido minado.")
+    await update.message.reply_chat_action("typing")
+
+    # Datos Bloque N
+    data_n = get_block_data(n)
+    if not data_n:
+        await update.message.reply_text(f"⏳ El bloque {n} no existe o no hay datos.")
         return
 
-    # Obtener precio actual y comparar
-    price_now = get_price()
-    if price_now is None:
-        await update.message.reply_text("⚠️ Error al obtener el precio.")
-        return
-
-    # Lógica del símbolo (Compara precio actual vs el último que guardó el bot)
-    symbol = "✔️" if price_now >= ultimo_precio_registrado else "❌"
-    
-    msg = f"🟦 **BLOQUE {n}**\n"
-    msg += f"💰 Precio BTC: `${price_now:,.2f} USD` {symbol}\n"
-    msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n, 144) else '❌'}\n"
-    msg += f"⚙️ Múltiplo 2016: {'✔️' if is_multiple(n, 2016) else '❌'}\n\n"
-
-    # Bloque N+6
+    # Datos Bloque N+6
     n6 = n + 6
-    if check_block(n6):
-        msg += f"🟩 **BLOQUE {n6} (N+6)**\n"
-        msg += f"✅ Confirmado\n"
-        msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n6, 144) else '❌'}\n"
-    else:
-        msg += f"🟩 **BLOQUE {n6} (N+6)**\n"
-        msg += f"⏳ Esperando minado..."
+    data_n6 = get_block_data(n6)
 
-    # Actualizamos el "precio anterior" para la siguiente consulta de prueba
-    ultimo_precio_registrado = price_now
+    # Lógica de comparación
+    msg = f"🟦 **BLOQUE {n}**\n"
+    msg += f"💰 Precio: `${data_n['price']:,.2f} USD`\n"
+    msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n, 144) else '❌'}\n\n"
+
+    if data_n6:
+        # COMPARACIÓN REAL
+        symbol6 = "✔️" if data_n6['price'] > data_n['price'] else "❌"
+        msg += f"🟩 **BLOQUE {n6} (N+6)**\n"
+        msg += f"💰 Precio: `${data_n6['price']:,.2f} USD` {symbol6}\n"
+        msg += f"📊 Múltiplo 144: {'✔️' if is_multiple(n6, 144) else '❌'}\n"
+        
+        diff = data_n6['price'] - data_n['price']
+        msg += f"\n📈 Variación: `{'+' if diff > 0 else ''}{diff:,.2f} USD`"
+    else:
+        msg += f"🟩 **BLOQUE {n6}**\n⏳ Aún no minado o sin datos de precio."
 
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 def main():
-    # Usando la versión asíncrona de la librería (v20+)
     app = Application.builder().token(TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("bloque", bloque))
-
-    print("🤖 Bot iniciado con el token proporcionado...")
     app.run_polling()
 
 if __name__ == "__main__":
