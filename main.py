@@ -2,23 +2,34 @@ import requests
 from telegram.ext import Updater, CommandHandler
 
 API_PRICE = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-API_BLOCK = "https://mempool.space/api/block-height/{}"
-API_HEIGHT = "https://mempool.space/api/blocks/tip/height"
 
-def get_price():
-    r = requests.get(API_PRICE).json()
-    return r["bitcoin"]["usd"]
-
-def get_block_height():
-    return requests.get(API_HEIGHT).json()
-
-def get_block_time(height):
+# Obtener hash del bloque desde la altura
+def get_block_hash(height):
     try:
-        data = requests.get(API_BLOCK.format(height)).json()
+        return requests.get(f"https://mempool.space/api/block-height/{height}").text
+    except:
+        return None
+
+# Obtener timestamp del bloque usando el hash
+def get_block_time(height):
+    block_hash = get_block_hash(height)
+    if not block_hash:
+        return None
+    try:
+        data = requests.get(f"https://mempool.space/api/block/{block_hash}").json()
         return data["timestamp"]
     except:
         return None
 
+# Precio BTC
+def get_price():
+    try:
+        r = requests.get(API_PRICE).json()
+        return r["bitcoin"]["usd"]
+    except:
+        return None
+
+# Múltiplos
 def is_multiple(n, base):
     return n % base == 0
 
@@ -29,12 +40,10 @@ def bloque(update, context):
         update.message.reply_text("Uso: /bloque <numero>")
         return
 
-    current_height = get_block_height()
-
     # Bloque principal
     block_time = get_block_time(n)
     if block_time is None:
-        update.message.reply_text(f"Bloque {n} aún no está minado. Te avisaré cuando llegue.")
+        update.message.reply_text(f"Bloque {n} aún no está minado.")
         return
 
     price_now = get_price()
@@ -73,7 +82,7 @@ def bloque(update, context):
     update.message.reply_text(msg)
 
 def main():
-    updater = Updater("BOT_TOKEN_AQUI", use_context=True)
+    updater = Updater("8725996090:AAF44XD_l4TpymdFrEareVG-RpYH_OM8kzg", use_context=True)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("bloque", bloque))
